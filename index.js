@@ -2,7 +2,9 @@
 
 // Make sure lines are splited correctly
 // http://stackoverflow.com/questions/1155678/javascript-string-newline-character
-const NEW_LINE = /\r\n|\n|\r/;
+const NEW_LINE = /\r\n|\n|\r/
+const NEW_LINE_NOSPACE = /(\r\n|\n|\r)(?!\s)/;
+const NEW_LINE_SPACE = /(\r\n|\n|\r)+ ?/;
 const path = require("path");
 const fs = require("fs");
 const Q = require("q");
@@ -14,62 +16,53 @@ const cwd = process.cwd();
  * @param {string} source
  * @returns {Object}
  */
-function convert(source) {
-  let currentKey = "",
-      currentValue = "",
-      objectNames = [],
-      output = {},
-      parentObj = {},
-      lines = source.split(NEW_LINE),
-      splitAt;
-
-  let currentObj = output;
-  let parents = [];
+const convert = source => {
+  const lines = source.split(NEW_LINE_NOSPACE)
+  const section = []
+  let currentEvent = {}
+  let lastKey = ''
+  let ret
 
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
-    if (line.charAt(0) === " ") {
-      currentObj[currentKey] += line.substr(1);
+    const line = lines[i].replace(NEW_LINE_SPACE, '')
 
+    if (line.match(NEW_LINE) || line.match(/^$/) || line.match(/BEGIN:VCALENDAR/) || line.match(/END:VCALENDAR/)) {
+      continue
+    } else if (line.match(/^BEGIN:/)) {
+      const newSection = line.replace(/^BEGIN:/, '')
+      section.push(newSection)
+      if (!ret) {
+        ret = currentEvent
+      } else {
+        ret[newSection] = (ret[newSection] || []).concat(currentEvent)
+      }
+      currentEvent = {}
+    } else if (line.match(/^END:/) ) {
+      const closeSection = line.replace(/^END:/, '')
+      const shouldClose = section.pop()
+      if (shouldClose !== closeSection) {
+        console.error('closing section doesnt map expectation', closeSection, shouldClose)
+      }
+    } else if (line.match(/^[A-Z\-]+;/)) {
+      const o = line.split(';')
+      const v = o.slice(1).reduce((acc, cur) => {
+        const p = cur.split('=')
+        return Object.assign({}, acc, {
+          [p[0]]: p[1]
+        })
+      }, {})
+      currentEvent[o[0]] = (currentEvent[o[0]] || []).concat(v)
+    } else if (line.match(/^[A-Z\-]+:/)) {
+      const p = line.split(':')
+      lastKey = p[0]
+      currentEvent[lastKey] = p[1]
     } else {
-      splitAt = line.indexOf(":");
-
-      if (splitAt < 0) {
-        continue;
-      }
-
-      currentKey = line.substr(0, splitAt);
-      currentValue = line.substr(splitAt + 1);
-
-      switch (currentKey) {
-        case "BEGIN":
-          parents.push(parentObj);
-          parentObj = currentObj;
-          if (parentObj[currentValue] == null) {
-            parentObj[currentValue] = [];
-          }
-          // Create a new object, store the reference for future uses
-          currentObj = {};
-          parentObj[currentValue].push(currentObj);
-          break;
-        case "END":
-          currentObj = parentObj;
-          parentObj = parents.pop();
-          break;
-        default:
-          if(currentObj[currentKey]) {
-            if(!Array.isArray(currentObj[currentKey])) {
-              currentObj[currentKey] = [currentObj[currentKey]];
-            }
-            currentObj[currentKey].push(currentValue);
-          } else {
-            currentObj[currentKey] = currentValue;
-          }
-      }
+      console.error('error parsing line:', line)
     }
   }
-  return output;
-};
+
+  return Object.assign({}, ret)
+}
 
 /**
  * Take JSON, revert back to ical
