@@ -2,9 +2,9 @@
 
 // Make sure lines are splited correctly
 // http://stackoverflow.com/questions/1155678/javascript-string-newline-character
-const NEW_LINE = /\r\n|\n|\r/
+const NEW_LINE = /^(\r\n|\n|\r)$/
 const NEW_LINE_NOSPACE = /(\r\n|\n|\r)(?!\s)/;
-const NEW_LINE_SPACE = /(\r\n|\n|\r)+ ?/;
+const NEW_LINE_SPACE = /\r\n|\n|\r\s/;
 const path = require("path");
 const fs = require("fs");
 const Q = require("q");
